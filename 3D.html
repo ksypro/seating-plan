@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>6×6 可拖動座位表（Firebase 同步版）</title>
+    <title>6×6 可拖動座位表（Firebase 同步版 - 性別配色）</title>
     
     <style>
         body {margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,"PingFang HK","Microsoft JhengHei";background:#111827;color:#e5e7eb;text-align:center;}
@@ -17,7 +17,38 @@
         button {cursor:pointer;border:none;padding:8px 14px;border-radius:8px;font-weight:600;color:#fff;background:#16a34a;margin:0 4px;}
         button.danger{background:#dc2626;}
         #bank {display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-bottom:20px;}
-        #bank .student {background:#1e3a8a;padding:4px 8px;border-radius:6px;}
+        
+        /* ---------------------------------------------------- */
+        /* 新增：性別配色樣式 */
+        /* ---------------------------------------------------- */
+        
+        /* 男同學：淡粉藍色 (Light Pastel Blue) */
+        .student.male {
+            background:#3b82f6; /* 原來的深藍色 */
+            background:#93c5fd; /* 較淡的粉藍色 */
+            color: #1e3a8a; /* 深色文字以確保可讀性 */
+        }
+
+        /* 女同學：淡粉色 (Light Pastel Pink) */
+        .student.female {
+            background:#f472b6; /* 較深的粉色 */
+            background:#fbcfe8; /* 較淡的粉色 */
+            color: #831843; /* 深色文字以確保可讀性 */
+        }
+
+        #bank .student {
+             /* 根據性別應用顏色 */
+            padding:4px 8px;border-radius:6px;
+        }
+        
+        /* 確保未入座列表的學生顏色也應用了性別色 */
+        #bank .student.male {
+             background:#93c5fd; 
+        }
+        #bank .student.female {
+             background:#fbcfe8;
+        }
+
         .foot {font-size:12px;color:#9ca3af;margin-bottom:20px;}
     </style>
 </head>
@@ -37,7 +68,7 @@
     
     <script>
         // ----------------------------------------------------
-        // 您的 Firebase 配置資訊
+        // 您的 Firebase 配置資訊 (保持不變)
         // ----------------------------------------------------
         const firebaseConfig = {
             apiKey: "AIzaSyANB5cwFX9LCmWjQVfHL7CIEAf_Pz-Tvow",
@@ -51,35 +82,156 @@
         // 初始化 Firebase 和 Firestore
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        // 指定座位表資料儲存的位置 (文檔 ID: class_a_seats)
         const SEAT_DOC_REF = db.collection("seating_charts").doc("class_a_seats");
         
         // ----------------------------------------------------
-        // 您的原有程式碼邏輯
+        // 關鍵修改 1：修改 NAMES 變數，將學生資料轉為物件陣列，包含性別資訊
         // ----------------------------------------------------
-        const NAMES=["陳浩軒","陳栢濤","陳溢禮","張穎雋","覃彥霖","崔凌峰","何澤仁","劉昊軒","李文韜","李柏熹","梁淽竣","李世聰","林希","莫家昇","吳靖嘉","彭寶誠","王子齊","趙俊堯","陳明蔚","陳彥霏","張路霏","韓柳萱","黃蓓恩","黎洛宜","林至妍","劉容慧","李穎詩","李嘉彤","馬丹敏","莫倚敏","王秋婷","伍凱瑤","鍾汝翹"];
+        
+        const MALE_NAMES = [
+             "陳浩軒", "陳栢濤", "陳溢禮", "張穎雋", "覃彥霖", "崔凌峰",
+             "何澤仁", "劉昊軒", "李文韜", "李柏熹", "梁淽竣", "李世聰",
+             "林希", "莫家昇", "吳靖嘉", "彭寶誠", "王子齊", "趙俊堯"
+        ];
+        const FEMALE_NAMES = [
+             "陳明蔚", "陳彥霏", "張路霏", "韓柳萱", "黃蓓恩", "黎洛宜",
+             "林至妍", "劉容慧", "李穎詩", "李嘉彤", "馬丹敏", "莫倚敏",
+             "王秋婷", "伍凱瑤", "鍾汝翹"
+        ];
+        
+        // 合併為單一列表，每個元素是一個包含 name 和 gender 的物件
+        const ALL_STUDENTS = [
+             ...MALE_NAMES.map(name => ({ name: name, gender: 'male' })),
+             ...FEMALE_NAMES.map(name => ({ name: name, gender: 'female' }))
+        ];
+        
+        // NAMES 變數現在將用於檢查學生是否在 ALL_STUDENTS 中
+        const NAMES = ALL_STUDENTS.map(s => s.name); 
+
         const ROWS=6,COLS=6,TOTAL=ROWS*COLS;
-        let seats=new Array(TOTAL).fill(null),selected=null;
+        // seats 陣列現在將儲存學生物件 (例如：{name: '陳浩軒', gender: 'male'})
+        let seats=new Array(TOTAL).fill(null),selected=null; 
         const rowsEl=document.getElementById('rows'),bankEl=document.getElementById('bank');
 
         function build(){rowsEl.innerHTML='';let i=0;for(let r=0;r<ROWS;r++){const row=document.createElement('div');row.className='row';for(let c=0;c<COLS;c++){const seat=document.createElement('div');seat.className='seat';seat.dataset.i=i;seat.addEventListener('click',clickSeat);seat.addEventListener('dragover',e=>e.preventDefault());seat.addEventListener('drop',dropSeat);row.appendChild(seat);i++;}rowsEl.appendChild(row);}render();}
 
-        function render(){document.querySelectorAll('.seat').forEach(s=>{s.innerHTML='';const i=+s.dataset.i;if(seats[i]){const t=document.createElement('div');t.className='student';t.textContent=seats[i];t.draggable=true;t.addEventListener('dragstart',e=>{e.dataTransfer.setData('text',JSON.stringify({name:seats[i],i}));});s.appendChild(t);}});
-        bankEl.innerHTML='';const remaining=NAMES.filter(n=>!seats.includes(n));remaining.forEach(n=>{const t=document.createElement('div');t.className='student';t.textContent=n;t.draggable=true;t.addEventListener('dragstart',e=>{e.dataTransfer.setData('text',JSON.stringify({name:n}));});bankEl.appendChild(t);});bankEl.addEventListener('dragover',e=>e.preventDefault());bankEl.addEventListener('drop',dropBank);}
+        // ----------------------------------------------------
+        // 關鍵修改 2：修改 render() 函數，處理物件資料並添加性別 CSS Class
+        // ----------------------------------------------------
+        function render(){
+            // 處理座位表
+            document.querySelectorAll('.seat').forEach(s=>{
+                s.innerHTML='';
+                const i=+s.dataset.i;
+                if(seats[i]){
+                    const studentData = seats[i]; // seats[i] 是一個物件
+                    const t=document.createElement('div');
+                    t.className='student ' + studentData.gender; // 添加性別 class
+                    t.textContent=studentData.name;
+                    t.draggable=true;
+                    // 拖曳數據現在包含 name 和 gender
+                    t.addEventListener('dragstart',e=>{
+                        e.dataTransfer.setData('text',JSON.stringify({name:studentData.name, gender: studentData.gender, i}));
+                    });
+                    s.appendChild(t);
+                }
+            });
+            
+            // 處理未入座名單 (Bank)
+            bankEl.innerHTML='';
+            
+            // 過濾出未入座的學生物件
+            const currentSeatedNames = seats.filter(s => s !== null).map(s => s.name);
+            const remainingStudents = ALL_STUDENTS.filter(s => !currentSeatedNames.includes(s.name));
+            
+            remainingStudents.forEach(studentData=>{
+                const t=document.createElement('div');
+                t.className='student ' + studentData.gender; // 添加性別 class
+                t.textContent=studentData.name;
+                t.draggable=true;
+                // 拖曳數據包含 name 和 gender
+                t.addEventListener('dragstart',e=>{
+                    e.dataTransfer.setData('text',JSON.stringify({name:studentData.name, gender: studentData.gender}));
+                });
+                bankEl.appendChild(t);
+            });
+            bankEl.addEventListener('dragover',e=>e.preventDefault());
+            bankEl.addEventListener('drop',dropBank);
+        }
 
-        function clickSeat(e){const idx=+e.currentTarget.dataset.i;if(selected===null){selected=idx;e.currentTarget.style.outline='2px solid #22c55e';}else{const a=selected,b=idx;document.querySelector(`.seat[data-i="${a}"]`).style.outline='none';[seats[a],seats[b]]=[seats[b],seats[a]];selected=null;render();save();}}
+        // ----------------------------------------------------
+        // 關鍵修改 3：修改拖曳/點擊函數，處理物件資料的交換和賦值
+        // ----------------------------------------------------
+        
+        function clickSeat(e){
+            const idx=+e.currentTarget.dataset.i;
+            if(selected===null){
+                selected=idx;
+                e.currentTarget.style.outline='2px solid #22c55e';
+            }else{
+                const a=selected,b=idx;
+                document.querySelector(`.seat[data-i="${a}"]`).style.outline='none';
+                // 交換 seats 陣列中的物件
+                [seats[a],seats[b]]=[seats[b],seats[a]];
+                selected=null;
+                render();
+                save();
+            }
+        }
 
-        function dropSeat(e){e.preventDefault();const data=JSON.parse(e.dataTransfer.getData('text'));const idx=+e.currentTarget.dataset.i;if(data.i!=null){[seats[data.i],seats[idx]]=[seats[idx],seats[data.i]];}else{seats[idx]=data.name;}render();save();}
-        function dropBank(e){e.preventDefault();const data=JSON.parse(e.dataTransfer.getData('text'));if(data.i!=null){seats[data.i]=null;render();save();}}
+        function dropSeat(e){
+            e.preventDefault();
+            const data=JSON.parse(e.dataTransfer.getData('text'));
+            const idx=+e.currentTarget.dataset.i;
+            
+            // 創建或接收學生物件
+            const studentObject = {name: data.name, gender: data.gender};
+
+            if(data.i!=null){
+                // 來自座位表的拖曳 (交換)
+                [seats[data.i],seats[idx]]=[seats[idx],seats[data.i]];
+            }else{
+                // 來自未入座名單的拖曳 (放置)
+                seats[idx]=studentObject;
+            }
+            render();
+            save();
+        }
+        
+        function dropBank(e){
+            e.preventDefault();
+            const data=JSON.parse(e.dataTransfer.getData('text'));
+            if(data.i!=null){
+                // 將座位上的學生設為 null
+                seats[data.i]=null;
+                render();
+                save();
+            }
+        }
 
         function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
         
+        // 隨機分配函數，現在處理學生物件
+        function randomAssign(){
+            seats.fill(null);
+            shuffle([...ALL_STUDENTS]).forEach((studentObject,i)=>{
+                if(i<TOTAL)seats[i]=studentObject; // 儲存物件
+            });
+            render();
+            save(); 
+        }
+        
+        function clearAll(){
+            seats.fill(null);
+            render();
+            save(); 
+        }
+
         // ----------------------------------------------------
-        // 關鍵修改：使用 Firebase 實現儲存與同步
+        // Firebase 邏輯 (保持不變)
         // ----------------------------------------------------
         
         function save(){
-            // 將座位陣列儲存到 Firestore
             SEAT_DOC_REF.set({ seats: seats })
                 .then(() => {
                     console.log("座位表已同步儲存到雲端。");
@@ -89,50 +241,28 @@
                 });
         }
         
-        function randomAssign(){
-            // 隨機分配後，執行儲存以同步到雲端
-            seats.fill(null);
-            shuffle([...NAMES]).forEach((n,i)=>{if(i<TOTAL)seats[i]=n});
-            render();
-            save(); 
-        }
-        
-        function clearAll(){
-            // 清空後，執行儲存以同步到雲端
-            seats.fill(null);
-            render();
-            save(); 
-        }
-
-        // 實作即時監聽 (Live Synchronization)
         function listenForUpdates() {
             SEAT_DOC_REF.onSnapshot((doc) => {
                 if (doc.exists) {
                     const data = doc.data();
-                    // 檢查雲端資料是否存在且與本地資料不同，防止無限更新迴圈
                     if (data && data.seats && JSON.stringify(data.seats) !== JSON.stringify(seats)) {
                         seats = data.seats;
                         render();
                         console.log("座位表已從雲端即時更新。");
                     }
                 } else {
-                    // 如果文件不存在 (第一次運行)，則執行隨機分配並儲存
                     console.log("雲端座位表文件不存在，將執行初始隨機分配。");
                     randomAssign(); 
                 }
             });
         }
 
-        // ----------------------------------------------------
         // 應用啟動
-        // ----------------------------------------------------
-        
         document.getElementById('btnShuffle').addEventListener('click',randomAssign);
         document.getElementById('btnClear').addEventListener('click',clearAll);
 
         function initApp() {
             build();
-            // 啟動即時監聽，取代舊的 load()
             listenForUpdates(); 
         }
 
